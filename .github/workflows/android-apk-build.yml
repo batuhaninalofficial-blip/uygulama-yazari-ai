@@ -1,0 +1,35 @@
+name: Android APK Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Projeyi indir
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle ayarla
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: APK oluştur
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: APK'yı yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: uygulama-yazari-ai-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
