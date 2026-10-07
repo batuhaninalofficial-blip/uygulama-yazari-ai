@@ -36,3 +36,4 @@ jobs:
         with:
           name: uygulama-yazari-ai-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
