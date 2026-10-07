@@ -49,6 +49,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /*
+     * =========================================================
+     * ANA ROBOT
+     * =========================================================
+     */
+
     private fun anaRobotIste(
         istek: String,
         callback: (String) -> Unit
@@ -56,10 +62,12 @@ class MainActivity : ComponentActivity() {
         Thread {
             try {
                 val url = URL(workerUrl)
+
                 val connection =
                     url.openConnection() as HttpURLConnection
 
                 connection.requestMethod = "POST"
+
                 connection.setRequestProperty(
                     "Content-Type",
                     "application/json"
@@ -70,7 +78,11 @@ class MainActivity : ComponentActivity() {
                 connection.readTimeout = 60000
 
                 val json = JSONObject()
-                json.put("istek", istek)
+
+                json.put(
+                    "istek",
+                    istek
+                )
 
                 connection.outputStream.use { output ->
                     output.write(
@@ -96,11 +108,13 @@ class MainActivity : ComponentActivity() {
                         ?: ""
 
                 if (responseCode !in 200..299) {
+
                     runOnUiThread {
                         callback(
                             "❌ Gemini hatası:\n$response"
                         )
                     }
+
                     return@Thread
                 }
 
@@ -111,11 +125,14 @@ class MainActivity : ComponentActivity() {
                     if (result.has("ana_robot")) {
 
                         val anaRobot =
-                            result.getJSONObject("ana_robot")
+                            result.getJSONObject(
+                                "ana_robot"
+                            )
 
                         buildString {
 
                             append("📋 PROJE\n")
+
                             append(
                                 anaRobot.optString(
                                     "proje_adi",
@@ -124,6 +141,7 @@ class MainActivity : ComponentActivity() {
                             )
 
                             append("\n\n🎯 AMAÇ\n")
+
                             append(
                                 anaRobot.optString(
                                     "amac",
@@ -132,6 +150,7 @@ class MainActivity : ComponentActivity() {
                             )
 
                             append("\n\n📱 PLATFORM\n")
+
                             append(
                                 anaRobot.optString(
                                     "platform",
@@ -139,7 +158,9 @@ class MainActivity : ComponentActivity() {
                                 )
                             )
 
-                            append("\n\n❓ EKSİK BİLGİLER\n")
+                            append(
+                                "\n\n❓ EKSİK BİLGİLER\n"
+                            )
 
                             val eksikler =
                                 anaRobot.optJSONArray(
@@ -154,15 +175,21 @@ class MainActivity : ComponentActivity() {
                                 for (
                                 i in 0 until eksikler.length()
                                 ) {
+
                                     append("• ")
+
                                     append(
                                         eksikler.getString(i)
                                     )
+
                                     append("\n")
                                 }
 
                             } else {
-                                append("Eksik bilgi yok.\n")
+
+                                append(
+                                    "Eksik bilgi yok.\n"
+                                )
                             }
 
                             append(
@@ -233,6 +260,107 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
+    /*
+     * =========================================================
+     * KODLAMA AI
+     * =========================================================
+     */
+
+    private fun kodlamaAIIste(
+        istek: String,
+        callback: (String) -> Unit
+    ) {
+        Thread {
+
+            try {
+
+                val url = URL(workerUrl)
+
+                val connection =
+                    url.openConnection() as HttpURLConnection
+
+                connection.requestMethod = "POST"
+
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json"
+                )
+
+                connection.doOutput = true
+                connection.connectTimeout = 30000
+                connection.readTimeout = 120000
+
+                val json = JSONObject()
+
+                json.put(
+                    "islem",
+                    "kodla"
+                )
+
+                json.put(
+                    "istek",
+                    istek
+                )
+
+                connection.outputStream.use { output ->
+
+                    output.write(
+                        json.toString()
+                            .toByteArray(Charsets.UTF_8)
+                    )
+                }
+
+                val responseCode =
+                    connection.responseCode
+
+                val stream =
+                    if (responseCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+
+                val response =
+                    stream
+                        ?.bufferedReader()
+                        ?.use { it.readText() }
+                        ?: ""
+
+                runOnUiThread {
+
+                    if (responseCode in 200..299) {
+
+                        callback(response)
+
+                    } else {
+
+                        callback(
+                            "❌ Kodlama AI hatası:\n$response"
+                        )
+                    }
+                }
+
+                connection.disconnect()
+
+            } catch (e: Exception) {
+
+                runOnUiThread {
+
+                    callback(
+                        "❌ Kodlama AI bağlantı hatası:\n${e.message}"
+                    )
+                }
+            }
+
+        }.start()
+    }
+
+    /*
+     * =========================================================
+     * ANA UYGULAMA
+     * =========================================================
+     */
+
     @Composable
     fun UygulamaYazari() {
 
@@ -241,6 +369,10 @@ class MainActivity : ComponentActivity() {
         }
 
         var sonuc by remember {
+            mutableStateOf("")
+        }
+
+        var kodlamaSonucu by remember {
             mutableStateOf("")
         }
 
@@ -260,6 +392,10 @@ class MainActivity : ComponentActivity() {
             mutableStateOf(false)
         }
 
+        var kodlamaTamamlandi by remember {
+            mutableStateOf(false)
+        }
+
         var beklemeBitti by remember {
             mutableStateOf(false)
         }
@@ -267,6 +403,12 @@ class MainActivity : ComponentActivity() {
         var gelenSonuc by remember {
             mutableStateOf<String?>(null)
         }
+
+        /*
+         * =====================================================
+         * ANA ROBOT BEKLEME
+         * =====================================================
+         */
 
         LaunchedEffect(analizYukleniyor) {
 
@@ -284,28 +426,17 @@ class MainActivity : ComponentActivity() {
                         gelenSonuc ?: ""
 
                     analizYukleniyor = false
+
                     analizTamamlandi = true
                 }
             }
         }
 
-        LaunchedEffect(uygulamaOlusturuluyor) {
-
-            if (uygulamaOlusturuluyor) {
-
-                /*
-                 * Şimdilik çalışma ekranı.
-                 *
-                 * Bir sonraki aşamada burası gerçek
-                 * AI kodlama + APK üretim backend'ine
-                 * bağlanacak.
-                 */
-                delay(20_000)
-
-                uygulamaOlusturuluyor = false
-                apkHazir = true
-            }
-        }
+        /*
+         * =====================================================
+         * ANA EKRAN
+         * =====================================================
+         */
 
         Box(
             modifier =
@@ -328,13 +459,15 @@ class MainActivity : ComponentActivity() {
 
                 /*
                  * =================================================
-                 * APK SONUÇ EKRANI
+                 * KODLAMA SONUCU
                  * =================================================
                  */
 
-                apkHazir -> {
+                kodlamaTamamlandi -> {
 
-                    APKResultScreen()
+                    KodlamaResultScreen(
+                        sonuc = kodlamaSonucu
+                    )
                 }
 
                 /*
@@ -352,6 +485,17 @@ class MainActivity : ComponentActivity() {
 
                 /*
                  * =================================================
+                 * ESKİ APK DURUMU
+                 * =================================================
+                 */
+
+                apkHazir -> {
+
+                    APKResultScreen()
+                }
+
+                /*
+                 * =================================================
                  * PROJE ANALİZİ TAMAMLANDI
                  * =================================================
                  */
@@ -360,10 +504,28 @@ class MainActivity : ComponentActivity() {
 
                     ProjectAnalysisScreen(
                         sonuc = sonuc,
+
                         onCreateApp = {
 
                             apkHazir = false
+
+                            kodlamaTamamlandi = false
+
                             uygulamaOlusturuluyor = true
+
+                            kodlamaAIIste(
+                                istek = istek
+                            ) { cevap ->
+
+                                kodlamaSonucu =
+                                    cevap
+
+                                uygulamaOlusturuluyor =
+                                    false
+
+                                kodlamaTamamlandi =
+                                    true
+                            }
                         }
                     )
                 }
@@ -390,14 +552,19 @@ class MainActivity : ComponentActivity() {
                 else -> {
 
                     MainInputScreen(
+
                         istek = istek,
+
                         onIstekChange = {
                             istek = it
                         },
+
                         onAnalyze = {
 
                             gelenSonuc = null
+
                             beklemeBitti = false
+
                             sonuc = ""
 
                             analizYukleniyor = true
@@ -406,14 +573,19 @@ class MainActivity : ComponentActivity() {
                                 istek = istek
                             ) { cevap ->
 
-                                gelenSonuc = cevap
+                                gelenSonuc =
+                                    cevap
 
                                 if (beklemeBitti) {
 
-                                    sonuc = cevap
+                                    sonuc =
+                                        cevap
 
-                                    analizYukleniyor = false
-                                    analizTamamlandi = true
+                                    analizYukleniyor =
+                                        false
+
+                                    analizTamamlandi =
+                                        true
                                 }
                             }
                         }
@@ -443,46 +615,70 @@ class MainActivity : ComponentActivity() {
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState)
+                    .verticalScroll(
+                        scrollState
+                    )
                     .padding(
                         horizontal = 20.dp,
                         vertical = 24.dp
                     ),
+
             horizontalAlignment =
                 Alignment.CenterHorizontally
         ) {
 
             Spacer(
-                modifier = Modifier.height(12.dp)
+                modifier =
+                    Modifier.height(12.dp)
             )
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier =
+                    Modifier.fillMaxWidth(),
+
                 verticalAlignment =
                     Alignment.CenterVertically
             ) {
 
                 Column(
-                    modifier = Modifier.weight(1f)
+                    modifier =
+                        Modifier.weight(1f)
                 ) {
 
                     Text(
-                        text = "UYGULAMA YAZARI",
-                        color = Color(0xFF7E8CFF),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
+                        text =
+                            "UYGULAMA YAZARI",
+
+                        color =
+                            Color(0xFF7E8CFF),
+
+                        fontSize =
+                            12.sp,
+
+                        fontWeight =
+                            FontWeight.Bold,
+
+                        letterSpacing =
+                            2.sp
                     )
 
                     Spacer(
-                        modifier = Modifier.height(4.dp)
+                        modifier =
+                            Modifier.height(4.dp)
                     )
 
                     Text(
-                        text = "AI Studio",
-                        color = Color.White,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.ExtraBold
+                        text =
+                            "AI Studio",
+
+                        color =
+                            Color.White,
+
+                        fontSize =
+                            28.sp,
+
+                        fontWeight =
+                            FontWeight.ExtraBold
                     )
                 }
 
@@ -491,50 +687,76 @@ class MainActivity : ComponentActivity() {
                         Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF151A35))
+                            .background(
+                                Color(0xFF151A35)
+                            )
                             .border(
                                 1.dp,
                                 Color(0xFF303A78),
                                 CircleShape
                             ),
-                    contentAlignment = Alignment.Center
+
+                    contentAlignment =
+                        Alignment.Center
                 ) {
 
                     Text(
-                        text = "✦",
-                        color = Color(0xFF9CA8FF),
-                        fontSize = 22.sp
+                        text =
+                            "✦",
+
+                        color =
+                            Color(0xFF9CA8FF),
+
+                        fontSize =
+                            22.sp
                     )
                 }
             }
 
             Spacer(
-                modifier = Modifier.height(18.dp)
+                modifier =
+                    Modifier.height(18.dp)
             )
 
             Text(
                 text =
                     "Aklındaki uygulamayı anlat.\nGerisini Ana Robot halletsin.",
-                color = Color(0xFFE9ECFF),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
+
+                color =
+                    Color(0xFFE9ECFF),
+
+                fontSize =
+                    20.sp,
+
+                fontWeight =
+                    FontWeight.Bold,
+
+                textAlign =
+                    TextAlign.Center
             )
 
             Spacer(
-                modifier = Modifier.height(6.dp)
+                modifier =
+                    Modifier.height(6.dp)
             )
 
             Text(
                 text =
                     "Fikrini yaz, AI ekibimiz arka planda çalışmaya başlasın.",
-                color = Color(0xFF8E95AD),
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center
+
+                color =
+                    Color(0xFF8E95AD),
+
+                fontSize =
+                    14.sp,
+
+                textAlign =
+                    TextAlign.Center
             )
 
             Spacer(
-                modifier = Modifier.height(10.dp)
+                modifier =
+                    Modifier.height(10.dp)
             )
 
             PremiumRobot(
@@ -542,13 +764,19 @@ class MainActivity : ComponentActivity() {
             )
 
             Text(
-                text = "●  Ana Robot hazır",
-                color = Color(0xFF68718D),
-                fontSize = 13.sp
+                text =
+                    "●  Ana Robot hazır",
+
+                color =
+                    Color(0xFF68718D),
+
+                fontSize =
+                    13.sp
             )
 
             Spacer(
-                modifier = Modifier.height(18.dp)
+                modifier =
+                    Modifier.height(18.dp)
             )
 
             Surface(
@@ -559,74 +787,115 @@ class MainActivity : ComponentActivity() {
                             18.dp,
                             RoundedCornerShape(24.dp)
                         ),
-                shape = RoundedCornerShape(24.dp),
-                color = Color(0xFF0D1122),
+
+                shape =
+                    RoundedCornerShape(24.dp),
+
+                color =
+                    Color(0xFF0D1122),
+
                 border =
-                    androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        Color(0xFF252D52)
-                    )
+                    androidx.compose.foundation
+                        .BorderStroke(
+                            1.dp,
+                            Color(0xFF252D52)
+                        )
             ) {
 
                 Column(
-                    modifier = Modifier.padding(18.dp)
+                    modifier =
+                        Modifier.padding(18.dp)
                 ) {
 
                     Text(
-                        text = "Uygulamanı anlat",
-                        color = Color(0xFFE9ECFF),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                        text =
+                            "Uygulamanı anlat",
+
+                        color =
+                            Color(0xFFE9ECFF),
+
+                        fontSize =
+                            14.sp,
+
+                        fontWeight =
+                            FontWeight.Bold
                     )
 
                     Spacer(
-                        modifier = Modifier.height(10.dp)
+                        modifier =
+                            Modifier.height(10.dp)
                     )
 
                     OutlinedTextField(
-                        value = istek,
-                        onValueChange = onIstekChange,
+
+                        value =
+                            istek,
+
+                        onValueChange =
+                            onIstekChange,
+
                         modifier =
                             Modifier
                                 .fillMaxWidth()
                                 .height(150.dp),
+
                         placeholder = {
 
                             Text(
                                 text =
                                     "Örneğin:\n\nButik restoranım için şık bir uygulama istiyorum. Müşteriler menüyü görebilsin ve rezervasyon yapabilsin.",
-                                color = Color(0xFF626A83),
-                                fontSize = 14.sp
+
+                                color =
+                                    Color(0xFF626A83),
+
+                                fontSize =
+                                    14.sp
                             )
                         },
+
                         colors =
-                            OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor =
-                                    Color(0xFF6875FF),
-                                unfocusedBorderColor =
-                                    Color(0xFF272E4A),
-                                focusedTextColor =
-                                    Color.White,
-                                unfocusedTextColor =
-                                    Color.White,
-                                cursorColor =
-                                    Color(0xFF8B96FF),
-                                focusedContainerColor =
-                                    Color(0xFF080B17),
-                                unfocusedContainerColor =
-                                    Color(0xFF080B17)
-                            ),
+                            OutlinedTextFieldDefaults
+                                .colors(
+
+                                    focusedBorderColor =
+                                        Color(0xFF6875FF),
+
+                                    unfocusedBorderColor =
+                                        Color(0xFF272E4A),
+
+                                    focusedTextColor =
+                                        Color.White,
+
+                                    unfocusedTextColor =
+                                        Color.White,
+
+                                    cursorColor =
+                                        Color(0xFF8B96FF),
+
+                                    focusedContainerColor =
+                                        Color(0xFF080B17),
+
+                                    unfocusedContainerColor =
+                                        Color(0xFF080B17)
+                                ),
+
                         shape =
                             RoundedCornerShape(18.dp)
                     )
 
                     Spacer(
-                        modifier = Modifier.height(14.dp)
+                        modifier =
+                            Modifier.height(14.dp)
                     )
 
                     Button(
-                        onClick = onAnalyze,
-                        enabled = istek.isNotBlank(),
+
+                        onClick =
+                            onAnalyze,
+
+                        enabled =
+                            istek.isNotBlank(),
+
                         modifier =
                             Modifier
                                 .fillMaxWidth()
@@ -635,30 +904,42 @@ class MainActivity : ComponentActivity() {
                                     12.dp,
                                     RoundedCornerShape(18.dp)
                                 ),
+
                         shape =
                             RoundedCornerShape(18.dp),
+
                         colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor =
-                                    Color(0xFF5865F2),
-                                disabledContainerColor =
-                                    Color(0xFF242943)
-                            )
+                            ButtonDefaults
+                                .buttonColors(
+
+                                    containerColor =
+                                        Color(0xFF5865F2),
+
+                                    disabledContainerColor =
+                                        Color(0xFF242943)
+                                )
                     ) {
 
                         Text(
                             text =
                                 "🚀  PROJEYİ ANALİZ ET",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.5.sp
+
+                            fontSize =
+                                14.sp,
+
+                            fontWeight =
+                                FontWeight.ExtraBold,
+
+                            letterSpacing =
+                                0.5.sp
                         )
                     }
                 }
             }
 
             Spacer(
-                modifier = Modifier.height(22.dp)
+                modifier =
+                    Modifier.height(22.dp)
             )
 
             AIStatusBar(
@@ -666,44 +947,63 @@ class MainActivity : ComponentActivity() {
             )
 
             Spacer(
-                modifier = Modifier.height(30.dp)
+                modifier =
+                    Modifier.height(30.dp)
             )
 
             Text(
-                text = "AI EKİBİ",
-                color = Color(0xFF6875FF),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp
+                text =
+                    "AI EKİBİ",
+
+                color =
+                    Color(0xFF6875FF),
+
+                fontSize =
+                    11.sp,
+
+                fontWeight =
+                    FontWeight.Bold,
+
+                letterSpacing =
+                    3.sp
             )
 
             Spacer(
-                modifier = Modifier.height(10.dp)
+                modifier =
+                    Modifier.height(10.dp)
             )
 
             Text(
                 text =
                     "Sen fikrini anlat.\nEkip geri kalanını halletsin.",
-                color = Color(0xFFB4BAD0),
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center
+
+                color =
+                    Color(0xFFB4BAD0),
+
+                fontSize =
+                    15.sp,
+
+                textAlign =
+                    TextAlign.Center
             )
 
             Spacer(
-                modifier = Modifier.height(16.dp)
+                modifier =
+                    Modifier.height(16.dp)
             )
 
             AIIcons()
 
             Spacer(
-                modifier = Modifier.height(30.dp)
+                modifier =
+                    Modifier.height(30.dp)
             )
         }
     }
 
     /*
      * =========================================================
-     * PROJE ANALİZİ EKRANI
+     * PROJE ANALİZİ
      * =========================================================
      */
 
@@ -717,74 +1017,111 @@ class MainActivity : ComponentActivity() {
             rememberScrollState()
 
         Column(
+
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState)
+                    .verticalScroll(
+                        scrollState
+                    )
                     .padding(20.dp),
+
             horizontalAlignment =
                 Alignment.CenterHorizontally
         ) {
 
             Spacer(
-                modifier = Modifier.height(30.dp)
+                modifier =
+                    Modifier.height(30.dp)
             )
 
             Text(
-                text = "✓",
-                color = Color(0xFF7F8CFF),
-                fontSize = 42.sp,
-                fontWeight = FontWeight.ExtraBold
+                text =
+                    "✓",
+
+                color =
+                    Color(0xFF7F8CFF),
+
+                fontSize =
+                    42.sp,
+
+                fontWeight =
+                    FontWeight.ExtraBold
             )
 
             Spacer(
-                modifier = Modifier.height(10.dp)
+                modifier =
+                    Modifier.height(10.dp)
             )
 
             Text(
-                text = "PROJE ANALİZİ TAMAMLANDI",
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center
+                text =
+                    "PROJE ANALİZİ TAMAMLANDI",
+
+                color =
+                    Color.White,
+
+                fontSize =
+                    22.sp,
+
+                fontWeight =
+                    FontWeight.ExtraBold,
+
+                textAlign =
+                    TextAlign.Center
             )
 
             Spacer(
-                modifier = Modifier.height(8.dp)
+                modifier =
+                    Modifier.height(8.dp)
             )
 
             Text(
                 text =
                     "Ana Robot projenizi analiz etti.\nŞimdi gerçek uygulamayı oluşturmaya başlayabiliriz.",
-                color = Color(0xFF8E95AD),
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center
+
+                color =
+                    Color(0xFF8E95AD),
+
+                fontSize =
+                    14.sp,
+
+                textAlign =
+                    TextAlign.Center
             )
 
             Spacer(
-                modifier = Modifier.height(24.dp)
+                modifier =
+                    Modifier.height(24.dp)
             )
 
             ResultCard(
-                sonuc = sonuc
+                sonuc =
+                    sonuc
             )
 
             Spacer(
-                modifier = Modifier.height(24.dp)
+                modifier =
+                    Modifier.height(24.dp)
             )
 
             Surface(
+
                 modifier =
                     Modifier.fillMaxWidth(),
+
                 shape =
                     RoundedCornerShape(22.dp),
+
                 color =
                     Color(0xFF0D1223),
+
                 border =
-                    androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        Color(0xFF303B68)
-                    )
+                    androidx.compose.foundation
+                        .BorderStroke(
+                            1.dp,
+                            Color(0xFF303B68)
+                        )
             ) {
 
                 Column(
@@ -793,45 +1130,72 @@ class MainActivity : ComponentActivity() {
                 ) {
 
                     Text(
-                        text = "🚀 SONRAKİ AŞAMA",
-                        color = Color(0xFF8D9AFF),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
+                        text =
+                            "🚀 SONRAKİ AŞAMA",
+
+                        color =
+                            Color(0xFF8D9AFF),
+
+                        fontSize =
+                            12.sp,
+
+                        fontWeight =
+                            FontWeight.Bold,
+
+                        letterSpacing =
+                            1.5.sp
                     )
 
                     Spacer(
-                        modifier = Modifier.height(10.dp)
+                        modifier =
+                            Modifier.height(10.dp)
                     )
 
                     Text(
                         text =
                             "AI ekibimiz şimdi bu projeyi gerçek bir Android uygulamasına dönüştürecek.",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold
+
+                        color =
+                            Color.White,
+
+                        fontSize =
+                            15.sp,
+
+                        fontWeight =
+                            FontWeight.SemiBold
                     )
 
                     Spacer(
-                        modifier = Modifier.height(8.dp)
+                        modifier =
+                            Modifier.height(8.dp)
                     )
 
                     Text(
                         text =
                             "Tasarım, kodlama, geliştirme, test ve kontrol işlemleri arka planda yürütülecek.",
-                        color = Color(0xFF8B92AA),
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp
+
+                        color =
+                            Color(0xFF8B92AA),
+
+                        fontSize =
+                            13.sp,
+
+                        lineHeight =
+                            20.sp
                     )
                 }
             }
 
             Spacer(
-                modifier = Modifier.height(20.dp)
+                modifier =
+                    Modifier.height(20.dp)
             )
 
             Button(
-                onClick = onCreateApp,
+
+                onClick =
+                    onCreateApp,
+
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -840,27 +1204,39 @@ class MainActivity : ComponentActivity() {
                             15.dp,
                             RoundedCornerShape(20.dp)
                         ),
+
                 shape =
                     RoundedCornerShape(20.dp),
+
                 colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor =
-                            Color(0xFF5865F2)
-                    )
+                    ButtonDefaults
+                        .buttonColors(
+                            containerColor =
+                                Color(0xFF5865F2)
+                        )
             ) {
 
                 Text(
                     text =
                         "🚀  UYGULAMAYI OLUŞTUR",
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.5.sp
+
+                    color =
+                        Color.White,
+
+                    fontSize =
+                        15.sp,
+
+                    fontWeight =
+                        FontWeight.ExtraBold,
+
+                    letterSpacing =
+                        0.5.sp
                 )
             }
 
             Spacer(
-                modifier = Modifier.height(30.dp)
+                modifier =
+                    Modifier.height(30.dp)
             )
         }
     }
@@ -878,87 +1254,133 @@ class MainActivity : ComponentActivity() {
 
         val infiniteTransition =
             rememberInfiniteTransition(
-                label = "workingScreen"
+                label =
+                    "workingScreen"
             )
 
         val ringRotation by
         infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
+
+            initialValue =
+                0f,
+
+            targetValue =
+                360f,
+
             animationSpec =
                 infiniteRepeatable(
+
                     animation =
                         tween(
                             7000,
-                            easing = LinearEasing
+                            easing =
+                                LinearEasing
                         ),
+
                     repeatMode =
                         RepeatMode.Restart
                 ),
-            label = "ringRotation"
+
+            label =
+                "ringRotation"
         )
 
         val reverseRotation by
         infiniteTransition.animateFloat(
-            initialValue = 360f,
-            targetValue = 0f,
+
+            initialValue =
+                360f,
+
+            targetValue =
+                0f,
+
             animationSpec =
                 infiniteRepeatable(
+
                     animation =
                         tween(
                             11000,
-                            easing = LinearEasing
+                            easing =
+                                LinearEasing
                         ),
+
                     repeatMode =
                         RepeatMode.Restart
                 ),
-            label = "reverseRotation"
+
+            label =
+                "reverseRotation"
         )
 
         val pulse by
         infiniteTransition.animateFloat(
-            initialValue = 0.92f,
-            targetValue = 1.08f,
+
+            initialValue =
+                0.92f,
+
+            targetValue =
+                1.08f,
+
             animationSpec =
                 infiniteRepeatable(
+
                     animation =
                         tween(
                             1200,
                             easing =
                                 FastOutSlowInEasing
                         ),
+
                     repeatMode =
                         RepeatMode.Reverse
                 ),
-            label = "workingPulse"
+
+            label =
+                "workingPulse"
         )
 
         var mesajIndex by remember {
-            mutableIntStateOf(0)
+
+            mutableIntStateOf(
+                0
+            )
         }
 
         val mesajlar =
+
             if (apkMode) {
 
                 listOf(
-                    "Uygulamanız geliştiriliyor...",
+
                     "Kodlama AI çalışıyor...",
-                    "Tasarım AI çalışıyor...",
+
+                    "Uygulama kaynak kodları oluşturuluyor...",
+
+                    "Android proje yapısı hazırlanıyor...",
+
                     "Geliştirme işlemleri sürüyor...",
-                    "Uygulama test ediliyor...",
-                    "Son kontroller yapılıyor...",
-                    "APK hazırlanıyor..."
+
+                    "Kodlar kontrol ediliyor...",
+
+                    "Son kontroller yapılıyor..."
                 )
 
             } else {
 
                 listOf(
+
                     "İsteğiniz analiz ediliyor...",
+
                     "Sizin için çalışıyoruz...",
+
                     "En uygun yapı belirleniyor...",
+
                     "Tasarım hazırlanıyor...",
+
                     "Kod mimarisi oluşturuluyor...",
+
                     "Geliştirme planı hazırlanıyor...",
+
                     "Son kontroller yapılıyor..."
                 )
             }
@@ -970,65 +1392,100 @@ class MainActivity : ComponentActivity() {
                 delay(2800)
 
                 mesajIndex =
-                    (mesajIndex + 1) %
+                    (
+                            mesajIndex + 1
+                            ) %
                             mesajlar.size
             }
         }
 
         Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+
+            modifier =
+                Modifier.fillMaxSize(),
+
+            contentAlignment =
+                Alignment.Center
         ) {
 
             Canvas(
-                modifier = Modifier.fillMaxSize()
+                modifier =
+                    Modifier.fillMaxSize()
             ) {
 
                 val center =
                     Offset(
+
                         size.width / 2f,
+
                         size.height / 2f
                     )
 
                 drawCircle(
+
                     brush =
                         Brush.radialGradient(
+
                             colors =
                                 listOf(
+
                                     Color(0xFF5865F2)
-                                        .copy(alpha = 0.18f),
+                                        .copy(
+                                            alpha =
+                                                0.18f
+                                        ),
+
                                     Color.Transparent
                                 )
                         ),
+
                     radius =
-                        size.minDimension * 0.48f,
-                    center = center
+                        size.minDimension *
+                                0.48f,
+
+                    center =
+                        center
                 )
             }
 
             Canvas(
+
                 modifier =
                     Modifier
                         .size(360.dp)
-                        .rotate(ringRotation)
+                        .rotate(
+                            ringRotation
+                        )
             ) {
 
                 val center =
                     Offset(
+
                         size.width / 2f,
+
                         size.height / 2f
                     )
 
                 drawCircle(
+
                     color =
                         Color(0xFF6875FF)
-                            .copy(alpha = 0.28f),
+                            .copy(
+                                alpha =
+                                    0.28f
+                            ),
+
                     radius =
-                        size.minDimension * 0.43f,
-                    center = center,
+                        size.minDimension *
+                                0.43f,
+
+                    center =
+                        center,
+
                     style =
                         Stroke(
-                            width = 2.dp.toPx()
+                            width =
+                                2.dp.toPx()
                         )
                 )
 
@@ -1036,23 +1493,36 @@ class MainActivity : ComponentActivity() {
 
                     val angle =
                         Math.toRadians(
-                            (i * 45).toDouble()
+                            (
+                                    i * 45
+                                    ).toDouble()
                         )
 
                     val radius =
-                        size.minDimension * 0.43f
+                        size.minDimension *
+                                0.43f
 
                     drawCircle(
+
                         color =
                             Color(0xFF9CA8FF),
-                        radius = 3.5.dp.toPx(),
+
+                        radius =
+                            3.5.dp.toPx(),
+
                         center =
                             Offset(
+
                                 center.x +
-                                        cos(angle).toFloat() *
+                                        cos(
+                                            angle
+                                        ).toFloat() *
                                         radius,
+
                                 center.y +
-                                        sin(angle).toFloat() *
+                                        sin(
+                                            angle
+                                        ).toFloat() *
                                         radius
                             )
                     )
@@ -1060,132 +1530,209 @@ class MainActivity : ComponentActivity() {
             }
 
             Canvas(
+
                 modifier =
                     Modifier
                         .size(310.dp)
-                        .rotate(reverseRotation)
+                        .rotate(
+                            reverseRotation
+                        )
             ) {
 
                 val center =
                     Offset(
+
                         size.width / 2f,
+
                         size.height / 2f
                     )
 
                 drawCircle(
+
                     color =
                         Color(0xFF4D5EFF)
-                            .copy(alpha = 0.30f),
+                            .copy(
+                                alpha =
+                                    0.30f
+                            ),
+
                     radius =
-                        size.minDimension * 0.43f,
-                    center = center,
+                        size.minDimension *
+                                0.43f,
+
+                    center =
+                        center,
+
                     style =
                         Stroke(
-                            width = 1.5.dp.toPx()
+                            width =
+                                1.5.dp.toPx()
                         )
                 )
             }
 
             Column(
+
                 horizontalAlignment =
                     Alignment.CenterHorizontally
             ) {
 
                 Box(
+
                     modifier =
                         Modifier
                             .size(
-                                (250 * pulse).dp
+                                (
+                                        250 *
+                                                pulse
+                                        ).dp
                             ),
+
                     contentAlignment =
                         Alignment.Center
                 ) {
 
                     PremiumRobot(
-                        aktif = true
+                        aktif =
+                            true
                     )
                 }
 
                 Spacer(
-                    modifier = Modifier.height(4.dp)
+                    modifier =
+                        Modifier.height(4.dp)
                 )
 
                 Surface(
+
                     shape =
-                        RoundedCornerShape(20.dp),
+                        RoundedCornerShape(
+                            20.dp
+                        ),
+
                     color =
                         Color(0xFF0D1223)
-                            .copy(alpha = 0.96f),
+                            .copy(
+                                alpha =
+                                    0.96f
+                            ),
+
                     border =
-                        androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            Color(0xFF303B68)
-                        ),
-                    shadowElevation = 12.dp
+                        androidx.compose.foundation
+                            .BorderStroke(
+                                1.dp,
+                                Color(0xFF303B68)
+                            ),
+
+                    shadowElevation =
+                        12.dp
                 ) {
 
                     Column(
+
                         modifier =
                             Modifier.padding(
-                                horizontal = 24.dp,
-                                vertical = 16.dp
+
+                                horizontal =
+                                    24.dp,
+
+                                vertical =
+                                    16.dp
                             ),
+
                         horizontalAlignment =
                             Alignment.CenterHorizontally
                     ) {
 
                         Text(
+
                             text =
                                 if (apkMode)
                                     "⚙️  AI GELİŞTİRME EKİBİ"
                                 else
                                     "🤖  ANA ROBOT",
+
                             color =
                                 Color(0xFF8D9AFF),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp
+
+                            fontSize =
+                                11.sp,
+
+                            fontWeight =
+                                FontWeight.Bold,
+
+                            letterSpacing =
+                                2.sp
                         )
 
                         Spacer(
-                            modifier = Modifier.height(7.dp)
+                            modifier =
+                                Modifier.height(
+                                    7.dp
+                                )
                         )
 
                         Text(
+
                             text =
-                                mesajlar[mesajIndex],
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center
+                                mesajlar[
+                                    mesajIndex
+                                ],
+
+                            color =
+                                Color.White,
+
+                            fontSize =
+                                15.sp,
+
+                            fontWeight =
+                                FontWeight.SemiBold,
+
+                            textAlign =
+                                TextAlign.Center
                         )
 
                         Spacer(
-                            modifier = Modifier.height(6.dp)
+                            modifier =
+                                Modifier.height(
+                                    6.dp
+                                )
                         )
 
                         Text(
+
                             text =
                                 if (apkMode)
-                                    "Uygulamanız hazırlanıyor"
+                                    "Gerçek kaynak kodları hazırlanıyor"
                                 else
                                     "AI ekibimiz sizin için çalışıyor",
-                            color = Color(0xFF777F98),
-                            fontSize = 11.sp
+
+                            color =
+                                Color(0xFF777F98),
+
+                            fontSize =
+                                11.sp
                         )
                     }
                 }
 
                 Spacer(
-                    modifier = Modifier.height(22.dp)
+                    modifier =
+                        Modifier.height(
+                            22.dp
+                        )
                 )
 
                 Row(
+
                     horizontalArrangement =
-                        Arrangement.spacedBy(7.dp)
+                        Arrangement.spacedBy(
+                            7.dp
+                        )
                 ) {
 
                     listOf(
+
                         "🤖",
                         "🎨",
                         "💻",
@@ -1193,15 +1740,278 @@ class MainActivity : ComponentActivity() {
                         "🛠️",
                         "🧪",
                         "🔍"
+
                     ).forEach { emoji ->
 
                         Text(
-                            text = emoji,
-                            fontSize = 15.sp
+
+                            text =
+                                emoji,
+
+                            fontSize =
+                                15.sp
                         )
                     }
                 }
             }
+        }
+    }
+
+    /*
+     * =========================================================
+     * KODLAMA AI SONUCU
+     * =========================================================
+     */
+
+    @Composable
+    fun KodlamaResultScreen(
+        sonuc: String
+    ) {
+
+        Column(
+
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(
+                        rememberScrollState()
+                    )
+                    .padding(20.dp),
+
+            horizontalAlignment =
+                Alignment.CenterHorizontally
+        ) {
+
+            Spacer(
+                modifier =
+                    Modifier.height(30.dp)
+            )
+
+            Text(
+
+                text =
+                    "✓",
+
+                color =
+                    Color(0xFF7F8CFF),
+
+                fontSize =
+                    48.sp,
+
+                fontWeight =
+                    FontWeight.ExtraBold
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
+
+            Text(
+
+                text =
+                    "KODLAMA AI TAMAMLANDI",
+
+                color =
+                    Color.White,
+
+                fontSize =
+                    22.sp,
+
+                fontWeight =
+                    FontWeight.ExtraBold,
+
+                textAlign =
+                    TextAlign.Center
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
+
+            Text(
+
+                text =
+                    "Kodlama AI gerçek Android proje dosyalarını oluşturdu.",
+
+                color =
+                    Color(0xFF8E95AD),
+
+                fontSize =
+                    14.sp,
+
+                textAlign =
+                    TextAlign.Center
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(22.dp)
+            )
+
+            Surface(
+
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .shadow(
+                            18.dp,
+                            RoundedCornerShape(
+                                24.dp
+                            )
+                        ),
+
+                shape =
+                    RoundedCornerShape(
+                        24.dp
+                    ),
+
+                color =
+                    Color(0xFF0D1223),
+
+                border =
+                    androidx.compose.foundation
+                        .BorderStroke(
+                            1.dp,
+                            Color(0xFF303B68)
+                        )
+            ) {
+
+                Column(
+
+                    modifier =
+                        Modifier.padding(
+                            20.dp
+                        )
+                ) {
+
+                    Text(
+
+                        text =
+                            "💻 KODLAMA AI ÇIKTISI",
+
+                        color =
+                            Color(0xFF8D9AFF),
+
+                        fontSize =
+                            12.sp,
+
+                        fontWeight =
+                            FontWeight.Bold,
+
+                        letterSpacing =
+                            1.5.sp
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                14.dp
+                            )
+                    )
+
+                    Text(
+
+                        text =
+                            sonuc,
+
+                        color =
+                            Color(0xFFD7DBEA),
+
+                        fontSize =
+                            12.sp,
+
+                        lineHeight =
+                            19.sp
+                    )
+                }
+            }
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        24.dp
+                    )
+            )
+
+            Surface(
+
+                modifier =
+                    Modifier.fillMaxWidth(),
+
+                shape =
+                    RoundedCornerShape(
+                        22.dp
+                    ),
+
+                color =
+                    Color(0xFF0D1223),
+
+                border =
+                    androidx.compose.foundation
+                        .BorderStroke(
+                            1.dp,
+                            Color(0xFF252D52)
+                        )
+            ) {
+
+                Column(
+
+                    modifier =
+                        Modifier.padding(
+                            20.dp
+                        )
+                ) {
+
+                    Text(
+
+                        text =
+                            "🚀 SIRADAKİ AŞAMA",
+
+                        color =
+                            Color(0xFF8D9AFF),
+
+                        fontSize =
+                            12.sp,
+
+                        fontWeight =
+                            FontWeight.Bold,
+
+                        letterSpacing =
+                            1.5.sp
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                10.dp
+                            )
+                    )
+
+                    Text(
+
+                        text =
+                            "Şimdi bu kaynak kodlarını GitHub'a gönderip GitHub Actions ile gerçek APK oluşturacağız.",
+
+                        color =
+                            Color.White,
+
+                        fontSize =
+                            14.sp,
+
+                        lineHeight =
+                            21.sp
+                    )
+                }
+            }
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        30.dp
+                    )
+            )
         }
     }
 
@@ -1215,6 +2025,7 @@ class MainActivity : ComponentActivity() {
     fun APKResultScreen() {
 
         Column(
+
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -1222,130 +2033,206 @@ class MainActivity : ComponentActivity() {
                         rememberScrollState()
                     )
                     .padding(20.dp),
+
             horizontalAlignment =
                 Alignment.CenterHorizontally
         ) {
 
             Spacer(
-                modifier = Modifier.height(35.dp)
+                modifier =
+                    Modifier.height(
+                        35.dp
+                    )
             )
 
             Text(
-                text = "✓",
-                color = Color(0xFF7F8CFF),
-                fontSize = 50.sp,
-                fontWeight = FontWeight.ExtraBold
+
+                text =
+                    "✓",
+
+                color =
+                    Color(0xFF7F8CFF),
+
+                fontSize =
+                    50.sp,
+
+                fontWeight =
+                    FontWeight.ExtraBold
             )
 
             Spacer(
-                modifier = Modifier.height(8.dp)
+                modifier =
+                    Modifier.height(
+                        8.dp
+                    )
             )
 
             Text(
-                text = "UYGULAMANIZ HAZIR",
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center
+
+                text =
+                    "UYGULAMANIZ HAZIR",
+
+                color =
+                    Color.White,
+
+                fontSize =
+                    24.sp,
+
+                fontWeight =
+                    FontWeight.ExtraBold,
+
+                textAlign =
+                    TextAlign.Center
             )
 
             Spacer(
-                modifier = Modifier.height(8.dp)
+                modifier =
+                    Modifier.height(
+                        8.dp
+                    )
             )
 
             Text(
+
                 text =
                     "AI ekibimiz uygulamanızı oluşturdu.",
-                color = Color(0xFF8E95AD),
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center
+
+                color =
+                    Color(0xFF8E95AD),
+
+                fontSize =
+                    14.sp,
+
+                textAlign =
+                    TextAlign.Center
             )
 
             Spacer(
-                modifier = Modifier.height(28.dp)
+                modifier =
+                    Modifier.height(
+                        28.dp
+                    )
             )
 
             Surface(
+
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .shadow(
                             18.dp,
-                            RoundedCornerShape(24.dp)
+                            RoundedCornerShape(
+                                24.dp
+                            )
                         ),
+
                 shape =
-                    RoundedCornerShape(24.dp),
+                    RoundedCornerShape(
+                        24.dp
+                    ),
+
                 color =
                     Color(0xFF0D1223),
+
                 border =
-                    androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        Color(0xFF303B68)
-                    )
+                    androidx.compose.foundation
+                        .BorderStroke(
+                            1.dp,
+                            Color(0xFF303B68)
+                        )
             ) {
 
                 Column(
+
                     modifier =
-                        Modifier.padding(20.dp)
+                        Modifier.padding(
+                            20.dp
+                        )
                 ) {
 
                     Text(
-                        text = "📦 APK DOSYASI",
+
+                        text =
+                            "📦 APK DOSYASI",
+
                         color =
                             Color(0xFF8D9AFF),
-                        fontSize = 12.sp,
+
+                        fontSize =
+                            12.sp,
+
                         fontWeight =
                             FontWeight.Bold,
-                        letterSpacing = 1.5.sp
+
+                        letterSpacing =
+                            1.5.sp
                     )
 
                     Spacer(
                         modifier =
-                            Modifier.height(12.dp)
+                            Modifier.height(
+                                12.dp
+                            )
                     )
 
                     Text(
+
                         text =
                             "uygulamaniz.apk",
-                        color = Color.White,
-                        fontSize = 17.sp,
+
+                        color =
+                            Color.White,
+
+                        fontSize =
+                            17.sp,
+
                         fontWeight =
                             FontWeight.Bold
                     )
 
                     Spacer(
                         modifier =
-                            Modifier.height(16.dp)
+                            Modifier.height(
+                                16.dp
+                            )
                     )
 
-                    /*
-                     * Gerçek APK bağlantısı,
-                     * APK üretim backend'i bağlandığında
-                     * burada aktif hale gelecek.
-                     */
-
                     Button(
+
                         onClick = {
-                            // Gerçek APK indirme işlemi
-                            // sonraki aşamada bağlanacak.
+                            // Gerçek APK indirme
+                            // GitHub Actions bağlantısından
+                            // sonra eklenecek.
                         },
+
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .height(56.dp),
+                                .height(
+                                    56.dp
+                                ),
+
                         shape =
-                            RoundedCornerShape(17.dp),
+                            RoundedCornerShape(
+                                17.dp
+                            ),
+
                         colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor =
-                                    Color(0xFF5865F2)
-                            )
+                            ButtonDefaults
+                                .buttonColors(
+                                    containerColor =
+                                        Color(0xFF5865F2)
+                                )
                     ) {
 
                         Text(
+
                             text =
                                 "⬇  APK'YI İNDİR",
-                            fontSize = 14.sp,
+
+                            fontSize =
+                                14.sp,
+
                             fontWeight =
                                 FontWeight.ExtraBold
                         )
@@ -1355,68 +2242,91 @@ class MainActivity : ComponentActivity() {
 
             Spacer(
                 modifier =
-                    Modifier.height(20.dp)
+                    Modifier.height(
+                        20.dp
+                    )
             )
 
-            /*
-             * =================================================
-             * APK KURULUM BİLGİSİ
-             * =================================================
-             */
-
             Surface(
+
                 modifier =
                     Modifier.fillMaxWidth(),
+
                 shape =
-                    RoundedCornerShape(22.dp),
+                    RoundedCornerShape(
+                        22.dp
+                    ),
+
                 color =
                     Color(0xFF0D1223),
+
                 border =
-                    androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        Color(0xFF252D52)
-                    )
+                    androidx.compose.foundation
+                        .BorderStroke(
+                            1.dp,
+                            Color(0xFF252D52)
+                        )
             ) {
 
                 Column(
+
                     modifier =
-                        Modifier.padding(20.dp)
+                        Modifier.padding(
+                            20.dp
+                        )
                 ) {
 
                     Text(
+
                         text =
                             "📱 ANDROID CİHAZA NASIL KURULUR?",
+
                         color =
                             Color(0xFF8D9AFF),
-                        fontSize = 12.sp,
+
+                        fontSize =
+                            12.sp,
+
                         fontWeight =
                             FontWeight.Bold,
-                        letterSpacing = 1.2.sp
+
+                        letterSpacing =
+                            1.2.sp
                     )
 
                     Spacer(
                         modifier =
-                            Modifier.height(14.dp)
+                            Modifier.height(
+                                14.dp
+                            )
                     )
 
                     Text(
+
                         text =
                             "1. APK dosyasını Android cihazınıza indirin.\n\n" +
                                     "2. Dosyalar veya İndirilenler klasöründen APK dosyasına dokunun.\n\n" +
                                     "3. Gerekirse bilinmeyen kaynaklardan uygulama yükleme iznini açın.\n\n" +
                                     "4. Yükle butonuna dokunun.\n\n" +
                                     "5. Kurulum tamamlandığında uygulamayı açabilirsiniz.",
+
                         color =
                             Color(0xFFD0D5E5),
-                        fontSize = 14.sp,
-                        lineHeight = 22.sp
+
+                        fontSize =
+                            14.sp,
+
+                        lineHeight =
+                            22.sp
                     )
                 }
             }
 
             Spacer(
                 modifier =
-                    Modifier.height(30.dp)
+                    Modifier.height(
+                        30.dp
+                    )
             )
         }
     }
@@ -1434,102 +2344,175 @@ class MainActivity : ComponentActivity() {
 
         val infiniteTransition =
             rememberInfiniteTransition(
-                label = "robotAnimation"
+                label =
+                    "robotAnimation"
             )
 
         val rotation by
         infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
+
+            initialValue =
+                0f,
+
+            targetValue =
+                360f,
+
             animationSpec =
                 infiniteRepeatable(
+
                     animation =
                         tween(
-                            if (aktif) 5000 else 9000,
-                            easing = LinearEasing
+
+                            if (aktif)
+                                5000
+                            else
+                                9000,
+
+                            easing =
+                                LinearEasing
                         ),
+
                     repeatMode =
                         RepeatMode.Restart
                 ),
-            label = "rotation"
+
+            label =
+                "rotation"
         )
 
         val pulse by
         infiniteTransition.animateFloat(
-            initialValue = 0.85f,
-            targetValue = 1.15f,
+
+            initialValue =
+                0.85f,
+
+            targetValue =
+                1.15f,
+
             animationSpec =
                 infiniteRepeatable(
+
                     animation =
                         tween(
-                            if (aktif) 900 else 1400,
+
+                            if (aktif)
+                                900
+                            else
+                                1400,
+
                             easing =
                                 FastOutSlowInEasing
                         ),
+
                     repeatMode =
                         RepeatMode.Reverse
                 ),
-            label = "pulse"
+
+            label =
+                "pulse"
         )
 
         Box(
-            modifier = Modifier.size(270.dp),
-            contentAlignment = Alignment.Center
+
+            modifier =
+                Modifier.size(
+                    270.dp
+                ),
+
+            contentAlignment =
+                Alignment.Center
         ) {
 
             Canvas(
+
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .rotate(rotation)
+                        .rotate(
+                            rotation
+                        )
             ) {
 
                 val center =
                     Offset(
+
                         size.width / 2f,
+
                         size.height / 2f
                     )
 
                 val radius =
-                    size.minDimension * 0.40f
+                    size.minDimension *
+                            0.40f
 
                 drawCircle(
+
                     brush =
                         Brush.radialGradient(
+
                             colors =
                                 listOf(
+
                                     Color(0xFF5865F2)
-                                        .copy(alpha = 0.16f),
+                                        .copy(
+                                            alpha =
+                                                0.16f
+                                        ),
+
                                     Color.Transparent
                                 )
                         ),
+
                     radius =
-                        size.minDimension * 0.49f,
-                    center = center
+                        size.minDimension *
+                                0.49f,
+
+                    center =
+                        center
                 )
 
                 drawCircle(
+
                     color =
                         Color(0xFF6675FF)
-                            .copy(alpha = 0.65f),
-                    radius = radius,
-                    center = center,
+                            .copy(
+                                alpha =
+                                    0.65f
+                            ),
+
+                    radius =
+                        radius,
+
+                    center =
+                        center,
+
                     style =
                         Stroke(
-                            width = 2.dp.toPx()
+                            width =
+                                2.dp.toPx()
                         )
                 )
 
                 drawCircle(
+
                     color =
                         Color(0xFF4D5EFF)
-                            .copy(alpha = 0.35f),
+                            .copy(
+                                alpha =
+                                    0.35f
+                            ),
+
                     radius =
-                        radius * 1.15f,
-                    center = center,
+                        radius *
+                                1.15f,
+
+                    center =
+                        center,
+
                     style =
                         Stroke(
-                            width = 1.dp.toPx()
+                            width =
+                                1.dp.toPx()
                         )
                 )
 
@@ -1537,104 +2520,150 @@ class MainActivity : ComponentActivity() {
 
                     val angle =
                         Math.toRadians(
-                            (i * 30).toDouble()
+                            (
+                                    i * 30
+                                    ).toDouble()
                         )
 
                     val x =
                         center.x +
-                                cos(angle).toFloat() *
+                                cos(
+                                    angle
+                                ).toFloat() *
                                 radius
 
                     val y =
                         center.y +
-                                sin(angle).toFloat() *
+                                sin(
+                                    angle
+                                ).toFloat() *
                                 radius
 
                     drawCircle(
+
                         color =
                             Color(0xFF8792FF),
+
                         radius =
                             if (aktif)
                                 3.5.dp.toPx()
                             else
                                 2.dp.toPx(),
+
                         center =
-                            Offset(x, y)
+                            Offset(
+                                x,
+                                y
+                            )
                     )
                 }
             }
 
             Box(
+
                 modifier =
                     Modifier
                         .size(
-                            (170 * pulse).dp
+                            (
+                                    170 *
+                                            pulse
+                                    ).dp
                         )
-                        .clip(CircleShape)
+                        .clip(
+                            CircleShape
+                        )
                         .background(
+
                             Brush.radialGradient(
+
                                 colors =
                                     listOf(
+
                                         Color(0xFF27326E),
+
                                         Color(0xFF0E1227)
                                     )
                             )
                         )
                         .border(
+
                             2.dp,
+
                             Color(0xFF6978FF),
+
                             CircleShape
                         )
                         .shadow(
+
                             30.dp,
+
                             CircleShape
                         ),
+
                 contentAlignment =
                     Alignment.Center
             ) {
 
                 Canvas(
+
                     modifier =
                         Modifier.fillMaxSize()
                 ) {
 
                     val center =
                         Offset(
+
                             size.width / 2f,
+
                             size.height / 2f
                         )
 
                     val robotWidth =
-                        size.width * 0.56f
+                        size.width *
+                                0.56f
 
                     val robotHeight =
-                        size.height * 0.62f
+                        size.height *
+                                0.62f
 
                     val left =
                         center.x -
-                                robotWidth / 2
+                                robotWidth /
+                                2
 
                     val top =
                         center.y -
-                                robotHeight / 2
+                                robotHeight /
+                                2
 
                     drawRoundRect(
+
                         brush =
                             Brush.verticalGradient(
+
                                 colors =
                                     listOf(
+
                                         Color(0xFFD9E0F0),
+
                                         Color(0xFF69758D),
+
                                         Color(0xFF30394E)
                                     )
                             ),
+
                         topLeft =
-                            Offset(left, top),
+                            Offset(
+                                left,
+                                top
+                            ),
+
                         size =
                             Size(
                                 robotWidth,
                                 robotHeight
                             ),
+
                         cornerRadius =
                             androidx.compose.ui.geometry
                                 .CornerRadius(
@@ -1643,19 +2672,30 @@ class MainActivity : ComponentActivity() {
                     )
 
                     drawRoundRect(
+
                         color =
                             Color(0xFF101526),
+
                         topLeft =
                             Offset(
-                                left + 12.dp.toPx(),
-                                top + 16.dp.toPx()
+
+                                left +
+                                        12.dp.toPx(),
+
+                                top +
+                                        16.dp.toPx()
                             ),
+
                         size =
                             Size(
+
                                 robotWidth -
                                         24.dp.toPx(),
-                                robotHeight * 0.46f
+
+                                robotHeight *
+                                        0.46f
                             ),
+
                         cornerRadius =
                             androidx.compose.ui.geometry
                                 .CornerRadius(
@@ -1664,43 +2704,68 @@ class MainActivity : ComponentActivity() {
                     )
 
                     val eyeY =
-                        top + 44.dp.toPx()
+                        top +
+                                44.dp.toPx()
 
                     drawCircle(
+
                         color =
                             Color(0xFF8C9BFF),
-                        radius = 6.dp.toPx(),
+
+                        radius =
+                            6.dp.toPx(),
+
                         center =
                             Offset(
-                                center.x - 24.dp.toPx(),
+
+                                center.x -
+                                        24.dp.toPx(),
+
                                 eyeY
                             )
                     )
 
                     drawCircle(
+
                         color =
                             Color(0xFF8C9BFF),
-                        radius = 6.dp.toPx(),
+
+                        radius =
+                            6.dp.toPx(),
+
                         center =
                             Offset(
-                                center.x + 24.dp.toPx(),
+
+                                center.x +
+                                        24.dp.toPx(),
+
                                 eyeY
                             )
                     )
 
                     drawRoundRect(
+
                         color =
                             Color(0xFF7A89FF),
+
                         topLeft =
                             Offset(
-                                center.x - 25.dp.toPx(),
-                                top + 75.dp.toPx()
+
+                                center.x -
+                                        25.dp.toPx(),
+
+                                top +
+                                        75.dp.toPx()
                             ),
+
                         size =
                             Size(
+
                                 50.dp.toPx(),
+
                                 5.dp.toPx()
                             ),
+
                         cornerRadius =
                             androidx.compose.ui.geometry
                                 .CornerRadius(
@@ -1709,19 +2774,29 @@ class MainActivity : ComponentActivity() {
                     )
 
                     drawCircle(
+
                         brush =
                             Brush.radialGradient(
+
                                 colors =
                                     listOf(
+
                                         Color(0xFF9CA8FF),
+
                                         Color(0xFF4858D8),
+
                                         Color.Transparent
                                     )
                             ),
-                        radius = 17.dp.toPx(),
+
+                        radius =
+                            17.dp.toPx(),
+
                         center =
                             Offset(
+
                                 center.x,
+
                                 top +
                                         robotHeight -
                                         28.dp.toPx()
@@ -1730,10 +2805,18 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Text(
-                    text = "AI",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold
+
+                    text =
+                        "AI",
+
+                    color =
+                        Color.White,
+
+                    fontSize =
+                        11.sp,
+
+                    fontWeight =
+                        FontWeight.ExtraBold
                 )
             }
         }
@@ -1749,38 +2832,63 @@ class MainActivity : ComponentActivity() {
     fun PremiumBackground() {
 
         Canvas(
-            modifier = Modifier.fillMaxSize()
+
+            modifier =
+                Modifier.fillMaxSize()
         ) {
 
             val points =
                 listOf(
+
                     Offset(
-                        size.width * 0.12f,
-                        size.height * 0.16f
+                        size.width *
+                                0.12f,
+
+                        size.height *
+                                0.16f
                     ),
+
                     Offset(
-                        size.width * 0.88f,
-                        size.height * 0.28f
+                        size.width *
+                                0.88f,
+
+                        size.height *
+                                0.28f
                     ),
+
                     Offset(
-                        size.width * 0.24f,
-                        size.height * 0.72f
+                        size.width *
+                                0.24f,
+
+                        size.height *
+                                0.72f
                     ),
+
                     Offset(
-                        size.width * 0.78f,
-                        size.height * 0.82f
+                        size.width *
+                                0.78f,
+
+                        size.height *
+                                0.82f
                     )
                 )
 
             points.forEach { point ->
 
                 drawCircle(
+
                     color =
                         Color(0xFF4D5EFF)
-                            .copy(alpha = 0.08f),
+                            .copy(
+                                alpha =
+                                    0.08f
+                            ),
+
                     radius =
                         90.dp.toPx(),
-                    center = point
+
+                    center =
+                        point
                 )
             }
         }
@@ -1799,6 +2907,7 @@ class MainActivity : ComponentActivity() {
 
         val ekip =
             listOf(
+
                 "🤖",
                 "🎨",
                 "💻",
@@ -1809,52 +2918,83 @@ class MainActivity : ComponentActivity() {
             )
 
         Surface(
+
             modifier =
                 Modifier.fillMaxWidth(),
+
             shape =
-                RoundedCornerShape(20.dp),
+                RoundedCornerShape(
+                    20.dp
+                ),
+
             color =
                 Color(0xFF0A0E1C)
-                    .copy(alpha = 0.95f),
+                    .copy(
+                        alpha =
+                            0.95f
+                    ),
+
             border =
-                androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    Color(0xFF202744)
-                )
+                androidx.compose.foundation
+                    .BorderStroke(
+                        1.dp,
+                        Color(0xFF202744)
+                    )
         ) {
 
             Row(
+
                 modifier =
                     Modifier.padding(
-                        horizontal = 16.dp,
-                        vertical = 13.dp
+
+                        horizontal =
+                            16.dp,
+
+                        vertical =
+                            13.dp
                     ),
+
                 verticalAlignment =
                     Alignment.CenterVertically
             ) {
 
                 Text(
+
                     text =
-                        if (aktif) "⚡" else "✦",
-                    fontSize = 18.sp
+                        if (aktif)
+                            "⚡"
+                        else
+                            "✦",
+
+                    fontSize =
+                        18.sp
                 )
 
                 Spacer(
                     modifier =
-                        Modifier.width(10.dp)
+                        Modifier.width(
+                            10.dp
+                        )
                 )
 
                 Text(
+
                     text =
                         if (aktif)
                             "AI ekibi arka planda çalışıyor"
                         else
                             "7 AI sistemi hazır",
+
                     color =
                         Color(0xFFB8BED3),
-                    fontSize = 12.sp,
+
+                    fontSize =
+                        12.sp,
+
                     modifier =
-                        Modifier.weight(1f)
+                        Modifier.weight(
+                            1f
+                        )
                 )
 
                 Row {
@@ -1862,11 +3002,17 @@ class MainActivity : ComponentActivity() {
                     ekip.forEach { emoji ->
 
                         Text(
-                            text = emoji,
-                            fontSize = 14.sp,
+
+                            text =
+                                emoji,
+
+                            fontSize =
+                                14.sp,
+
                             modifier =
                                 Modifier.padding(
-                                    horizontal = 2.dp
+                                    horizontal =
+                                        2.dp
                                 )
                         )
                     }
@@ -1887,76 +3033,113 @@ class MainActivity : ComponentActivity() {
     ) {
 
         Surface(
+
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .shadow(
                         18.dp,
-                        RoundedCornerShape(24.dp)
+                        RoundedCornerShape(
+                            24.dp
+                        )
                     ),
+
             shape =
-                RoundedCornerShape(24.dp),
+                RoundedCornerShape(
+                    24.dp
+                ),
+
             color =
                 Color(0xFF0D1223),
+
             border =
-                androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    Color(0xFF303B68)
-                )
+                androidx.compose.foundation
+                    .BorderStroke(
+                        1.dp,
+                        Color(0xFF303B68)
+                    )
         ) {
 
             Column(
+
                 modifier =
-                    Modifier.padding(20.dp)
+                    Modifier.padding(
+                        20.dp
+                    )
             ) {
 
                 Row(
+
                     verticalAlignment =
                         Alignment.CenterVertically
                 ) {
 
                     Box(
+
                         modifier =
                             Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
+                                .size(
+                                    42.dp
+                                )
+                                .clip(
+                                    CircleShape
+                                )
                                 .background(
                                     Color(0xFF202B5A)
                                 ),
+
                         contentAlignment =
                             Alignment.Center
                     ) {
 
                         Text(
-                            text = "🤖",
-                            fontSize = 21.sp
+
+                            text =
+                                "🤖",
+
+                            fontSize =
+                                21.sp
                         )
                     }
 
                     Spacer(
                         modifier =
-                            Modifier.width(12.dp)
+                            Modifier.width(
+                                12.dp
+                            )
                     )
 
                     Column {
 
                         Text(
+
                             text =
                                 "ANA ROBOT SONUCU",
+
                             color =
                                 Color(0xFF8D9AFF),
-                            fontSize = 11.sp,
+
+                            fontSize =
+                                11.sp,
+
                             fontWeight =
                                 FontWeight.Bold,
-                            letterSpacing = 1.5.sp
+
+                            letterSpacing =
+                                1.5.sp
                         )
 
                         Text(
+
                             text =
                                 "Proje analizi tamamlandı",
+
                             color =
                                 Color.White,
-                            fontSize = 15.sp,
+
+                            fontSize =
+                                15.sp,
+
                             fontWeight =
                                 FontWeight.Bold
                         )
@@ -1965,25 +3148,37 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(
                     modifier =
-                        Modifier.height(16.dp)
+                        Modifier.height(
+                            16.dp
+                        )
                 )
 
                 HorizontalDivider(
+
                     color =
                         Color(0xFF252C45)
                 )
 
                 Spacer(
                     modifier =
-                        Modifier.height(16.dp)
+                        Modifier.height(
+                            16.dp
+                        )
                 )
 
                 Text(
-                    text = sonuc,
+
+                    text =
+                        sonuc,
+
                     color =
                         Color(0xFFD7DBEA),
-                    fontSize = 14.sp,
-                    lineHeight = 22.sp
+
+                    fontSize =
+                        14.sp,
+
+                    lineHeight =
+                        22.sp
                 )
             }
         }
@@ -2000,41 +3195,60 @@ class MainActivity : ComponentActivity() {
 
         val ekip =
             listOf(
+
                 "🤖" to "Ana Robot",
+
                 "🎨" to "Tasarım",
+
                 "💻" to "Kodlama",
+
                 "🧠" to "Analiz",
+
                 "🛠️" to "Geliştirme",
+
                 "🧪" to "Test",
+
                 "🔍" to "Kontrol"
             )
 
         Column(
+
             modifier =
                 Modifier.fillMaxWidth()
         ) {
 
-            ekip.chunked(4).forEach { satir ->
+            ekip.chunked(
+                4
+            ).forEach { satir ->
 
                 Row(
+
                     modifier =
                         Modifier.fillMaxWidth(),
+
                     horizontalArrangement =
                         Arrangement.SpaceEvenly
                 ) {
 
-                    satir.forEach { (emoji, isim) ->
+                    satir.forEach {
+                            (emoji, isim) ->
 
                         Column(
+
                             horizontalAlignment =
                                 Alignment.CenterHorizontally
                         ) {
 
                             Box(
+
                                 modifier =
                                     Modifier
-                                        .size(52.dp)
-                                        .clip(CircleShape)
+                                        .size(
+                                            52.dp
+                                        )
+                                        .clip(
+                                            CircleShape
+                                        )
                                         .background(
                                             Color(0xFF10162A)
                                         )
@@ -2043,26 +3257,39 @@ class MainActivity : ComponentActivity() {
                                             Color(0xFF252E50),
                                             CircleShape
                                         ),
+
                                 contentAlignment =
                                     Alignment.Center
                             ) {
 
                                 Text(
-                                    text = emoji,
-                                    fontSize = 21.sp
+
+                                    text =
+                                        emoji,
+
+                                    fontSize =
+                                        21.sp
                                 )
                             }
 
                             Spacer(
                                 modifier =
-                                    Modifier.height(5.dp)
+                                    Modifier.height(
+                                        5.dp
+                                    )
                             )
 
                             Text(
-                                text = isim,
+
+                                text =
+                                    isim,
+
                                 color =
                                     Color(0xFF777F98),
-                                fontSize = 9.sp,
+
+                                fontSize =
+                                    9.sp,
+
                                 textAlign =
                                     TextAlign.Center
                             )
@@ -2072,7 +3299,9 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(
                     modifier =
-                        Modifier.height(12.dp)
+                        Modifier.height(
+                            12.dp
+                        )
                 )
             }
         }
@@ -2090,18 +3319,25 @@ class MainActivity : ComponentActivity() {
     ) {
 
         MaterialTheme(
+
             colorScheme =
                 darkColorScheme(
+
                     primary =
                         Color(0xFF6875F5),
+
                     secondary =
                         Color(0xFF8B96FF),
+
                     background =
                         Color(0xFF050712),
+
                     surface =
                         Color(0xFF0D1122)
                 ),
-            content = content
+
+            content =
+                content
         )
     }
 }
